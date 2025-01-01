@@ -1,0 +1,12 @@
+#browser-window {
+    position: absolute;
+    top: 10%;
+    left: 10%;
+    width: 50%;
+    height: 50%;
+    background: #fff;
+    border: 1px solid #ccc;
+    resize: both;
+    overflow: auto;
+  }
+  

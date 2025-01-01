@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Partyline</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;900&family=Noto+Sans:wght@400;500;700;900&display=swap"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+  </head>
+  <body class="bg-[#111122] text-white" style="font-family: 'Be Vietnam Pro', 'Noto Sans', sans-serif;">
+    <div class="flex flex-col min-h-screen">
+      <!-- Header -->
+      <header class="flex justify-between items-center p-4 bg-[#242447]">
+        <div class="flex items-center">
+          <svg class="w-8 h-8 text-white" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+            <path
+              d="M4 42.4379C4 42.4379 14.0962 36.0744 24 41.1692C35.0664 46.8624 44 42.2078 44 42.2078L44 7.01134C44 7.01134 35.068 11.6577 24.0031 5.96913C14.0971 0.876274 4 7.27094 4 7.27094L4 42.4379Z"
+            ></path>
+          </svg>
+          <h1 class="text-lg font-bold ml-3">Partyline</h1>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="flex flex-col items-center justify-center flex-1">
+        <h2 class="text-2xl font-bold mb-4">Start a Watch Party</h2>
+        <p class="mb-6 text-center">Share a video from YouTube or any website</p>
+
+        <!-- Generate Party Link -->
+        <button
+          id="generateLinkButton"
+          class="px-6 py-3 bg-[#1919e6] text-white rounded-full font-bold mb-4"
+        >
+          Generate Party Link
+        </button>
+
+        <!-- Video Section -->
+        <div id="videoContainer" class="hidden flex-col items-center">
+          <video id="remoteVideo" autoplay playsinline class="mb-4"></video>
+          <div class="flex gap-4">
+            <button id="youtubeButton" class="px-6 py-3 bg-[#1919e6] text-white rounded-full font-bold">
+              From YouTube
+            </button>
+            <button id="webButton" class="px-6 py-3 bg-[#1919e6] text-white rounded-full font-bold">
+              From the Web
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Initialize Socket.IO connection
+      const socket = io("https://your-signaling-server-url"); // Replace with your server's URL
+      const peerConnection = new RTCPeerConnection();
+
+      // DOM Elements
+      const generateLinkButton = document.getElementById("generateLinkButton");
+      const youtubeButton = document.getElementById("youtubeButton");
+      const webButton = document.getElementById("webButton");
+      const videoContainer = document.getElementById("videoContainer");
+      const remoteVideo = document.getElementById("remoteVideo");
+
+      // Generate Party Link
+      generateLinkButton.addEventListener("click", () => {
+        const sessionId = Math.random().toString(36).substr(2, 9); // Unique session ID
+        const partyLink = `${window.location.origin}?session=${sessionId}`;
+        navigator.clipboard.writeText(partyLink).then(() => {
+          alert(`Party link copied to clipboard: ${partyLink}`);
+        });
+
+        // Notify server
+        socket.emit("create-session", { sessionId });
+      });
+
+      // Handle incoming connections
+      socket.on("join-session", ({ sessionId }) => {
+        alert(`Someone joined your session: ${sessionId}`);
+        videoContainer.classList.remove("hidden");
+      });
+
+      // Handle YouTube Button Click
+      youtubeButton.addEventListener("click", () => {
+        const videoUrl = prompt("Enter YouTube URL:");
+        if (videoUrl) {
+          socket.emit("play-video", { videoUrl });
+        }
+      });
+
+      // Handle Web Button Click
+      webButton.addEventListener("click", () => {
+        const webUrl = prompt("Enter Web URL:");
+        if (webUrl) {
+          socket.emit("sync-web", { webUrl });
+        }
+      });
+
+      // Handle WebRTC events
+      peerConnection.ontrack = (event) => {
+        remoteVideo.srcObject = event.streams[0];
+      };
+    </script>
+  </body>
+</html>
