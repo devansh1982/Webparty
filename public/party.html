@@ -1,40 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Partyline Call</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-</head>
-<body class="bg-dark text-light">
-  <div class="container text-center py-5">
-    <h1 class="mb-4">Welcome to the Watch Party</h1>
-    <p>Connecting you to the video call...</p>
-    <video id="videoCall" autoplay muted class="mt-3 border border-light rounded" style="width: 100%; max-width: 640px;"></video>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Partyline - Video Call</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.2.7/tailwind.min.css"
+    />
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      let localStream;
+      let peers = {};
 
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const sessionId = urlParams.get("session");
+      const socket = io();
 
-      if (!sessionId) {
-        alert("Invalid session. Please start a new party.");
-        window.location.href = "index.html";
-      } else {
-        console.log(`Session ID: ${sessionId}`);
-        startVideoCall(sessionId);
+      async function initVideoCall() {
+        try {
+          // Get user's video and audio
+          localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+
+          // Display local video
+          const localVideo = document.getElementById('localVideo');
+          localVideo.srcObject = localStream;
+          localVideo.play();
+
+          // Notify server that user has joined
+          socket.emit('join-call');
+
+          // Listen for other participants joining
+          socket.on('user-connected', (userId) => {
+            const peerConnection = createPeerConnection(userId);
+            peers[userId] = peerConnection;
+
+            // Add local stream to peer connection
+            localStream.getTracks().forEach((track) => {
+              peerConnection.addTrack(track, localStream);
+            });
+          });
+
+          // Listen for other participants leaving
+          socket.on('user-disconnected', (userId) => {
+            if (peers[userId]) {
+              peers[userId].close();
+              delete peers[userId];
+            }
+          });
+        } catch (error) {
+          console.error('Error accessing media devices.', error);
+        }
       }
-    });
 
-    function startVideoCall(sessionId) {
-      // Placeholder: Add WebRTC or video call API integration here
-      console.log(`Starting video call for session: ${sessionId}`);
-      const videoElement = document.getElementById("videoCall");
-      videoElement.src = "https://samplelib.com/lib/preview/mp4/sample-5s.mp4"; // Demo video for testing
-      videoElement.play();
-    }
-  </script>
-</body>
+      function createPeerConnection(userId) {
+        const peerConnection = new RTCPeerConnection();
+        peerConnection.ontrack = (event) => {
+          // Display remote video
+          const remoteVideo = document.createElement('video');
+          remoteVideo.srcObject = event.streams[0];
+          remoteVideo.autoplay = true;
+          remoteVideo.controls = true;
+          document.getElementById('remoteVideos').appendChild(remoteVideo);
+        };
+        return peerConnection;
+      }
+
+      window.onload = initVideoCall;
+    </script>
+  </head>
+  <body class="bg-gray-900 text-white font-sans">
+    <header class="p-4 bg-gray-800">
+      <h1 class="text-xl font-bold">Partyline</h1>
+    </header>
+    <main class="flex flex-col items-center justify-center min-h-screen">
+      <div>
+        <h2 class="text-2xl font-semibold mb-4">Video Call</h2>
+        <video id="localVideo" class="w-1/3 mb-4" autoplay muted></video>
+        <div id="remoteVideos" class="flex gap-4"></div>
+      </div>
+    </main>
+  </body>
 </html>
