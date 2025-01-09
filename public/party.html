@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Party Room</title>
+  <style>
+    video {
+      width: 300px;
+      height: auto;
+      margin: 10px;
+      border: 2px solid black;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    div {
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome to the Party!</h1>
+  <h2>Live Video Call</h2>
+  <video id="local-video" autoplay muted playsinline></video>
+  <video id="remote-video" autoplay playsinline></video>
+
+  <div>
+    <h2>Choose an Option:</h2>
+    <button onclick="openYouTube()">Watch on YouTube</button>
+    <button onclick="openChrome()">Open Chrome</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    // Get the party ID from the URL
+    const partyID = window.location.pathname.split('/party/')[1];
+    socket.emit('join-party', partyID);
+
+    const localVideo = document.getElementById('local-video');
+    const remoteVideo = document.getElementById('remote-video');
+    const peerConnections = {};
+
+    // Get user media and set up WebRTC
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
+      localVideo.srcObject = stream;
+
+      // Handle a new user joining
+      socket.on('user-joined', (userID) => {
+        const peerConnection = new RTCPeerConnection();
+        peerConnections[userID] = peerConnection;
+
+        stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+
+        peerConnection.ontrack = (event) => {
+          remoteVideo.srcObject = event.streams[0];
+        };
+
+        peerConnection.createOffer().then((offer) => {
+          peerConnection.setLocalDescription(offer);
+          socket.emit('offer', { targetID: userID, offer });
+        });
+      });
+
+      // Handle receiving an offer
+      socket.on('offer', ({ senderID, offer }) => {
+        const peerConnection = new RTCPeerConnection();
+        peerConnections[senderID] = peerConnection;
+
+        peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        peerConnection.createAnswer().then((answer) => {
+          peerConnection.setLocalDescription(answer);
+          socket.emit('answer', { targetID: senderID, answer });
+        });
+
+        peerConnection.ontrack = (event) => {
+          remoteVideo.srcObject = event.streams[0];
+        });
+
+        stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+      });
+
+      // Handle receiving an answer
+      socket.on('answer', ({ senderID, answer }) => {
+        peerConnections[senderID].setRemoteDescription(new RTCSessionDescription(answer));
+      });
+
+      // Handle receiving an ICE candidate
+      socket.on('ice-candidate', ({ senderID, candidate }) => {
+        peerConnections[senderID].addIceCandidate(new RTCIceCandidate(candidate));
+      });
+    });
+
+    // Open YouTube
+    function openYouTube() {
+      window.open('https://www.youtube.com', '_blank');
+    }
+
+    // Open Chrome
+    function openChrome() {
+      window.open('chrome://newtab', '_blank'); // Adjust as needed for testing
+    }
+  </script>
+</body>
+</html>
