@@ -1,58 +1,50 @@
-const express = require('express');
-const http = require('http');
-const { v4: uuidv4 } = require('uuid');
-const socketIo = require('socket.io');
-const path = require('path');
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
-
-// Example party storage (use a database in production)
-const parties = {};
+const io = new Server(server);
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static("public"));
 
-// Create a new party
-app.post('/create-party', (req, res) => {
-  const partyID = uuidv4();
-  parties[partyID] = { createdAt: new Date(), participants: [] };
-  res.json({ link: `https://your-app-url.com/party/${partyID}` });
+// API route to create a new party
+app.get("/start-party", (req, res) => {
+  const partyId = uuidv4(); // Generate a unique party ID
+  res.json({ link: `/party/${partyId}` });
 });
 
 // Serve the party page
-app.get('/party/:partyID', (req, res) => {
-  const { partyID } = req.params;
-  if (!parties[partyID]) return res.status(404).send('Party not found');
-  res.sendFile(path.join(__dirname, 'public', 'party.html'));
+app.get("/party/:partyId", (req, res) => {
+  res.sendFile(__dirname + "/public/party.html");
 });
 
-// WebSocket connection for video calls
-io.on('connection', (socket) => {
-  socket.on('join-party', (partyID) => {
-    if (!parties[partyID]) return;
+// Handle video calls with socket.io
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
 
-    socket.join(partyID);
-    socket.to(partyID).emit('user-joined', socket.id);
+  // Join the room
+  socket.on("join-call", (partyId) => {
+    socket.join(partyId);
+    socket.to(partyId).emit("user-connected", socket.id);
 
-    socket.on('disconnect', () => {
-      socket.to(partyID).emit('user-left', socket.id);
+    // Handle disconnection
+    socket.on("disconnect", () => {
+      socket.to(partyId).emit("user-disconnected", socket.id);
     });
+  });
 
-    socket.on('offer', ({ targetID, offer }) => {
-      socket.to(targetID).emit('offer', { senderID: socket.id, offer });
-    });
-
-    socket.on('answer', ({ targetID, answer }) => {
-      socket.to(targetID).emit('answer', { senderID: socket.id, answer });
-    });
-
-    socket.on('ice-candidate', ({ targetID, candidate }) => {
-      socket.to(targetID).emit('ice-candidate', { senderID: socket.id, candidate });
-    });
+  // Relay ICE candidates and SDP offers/answers
+  socket.on("signal", (data) => {
+    const { to, signal } = data;
+    io.to(to).emit("signal", { from: socket.id, signal });
   });
 });
 
 // Start the server
-server.listen(3000, () => console.log('Server running on http://localhost:3000'));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
